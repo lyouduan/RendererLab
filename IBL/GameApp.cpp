@@ -94,6 +94,12 @@ void GameApp::RenderScene(void)
 	// draw cubemap
 	DrawSceneToCubeMap(gfxContext);
 
+	// irradiance map
+	ConvoluteCubeMap(gfxContext);
+
+	// 
+	// scene pass
+	// 
 	// reset viewport and scissor
 	gfxContext.SetViewportAndScissor(m_Viewport, m_Scissor);
 
@@ -137,7 +143,7 @@ void GameApp::RenderScene(void)
 	// draw sky box at last
 	gfxContext.SetPipelineState(m_PSOs["sky"]);
 	//gfxContext.SetDynamicDescriptor(3, 0, m_cubeMap[0].GetSRV());
-	gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptor(3, 0, g_IrradianceMapBuffer.GetSRV());
 	DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
 
 	gfxContext.TransitionResource(g_DisplayPlane[g_CurrentBuffer], D3D12_RESOURCE_STATE_PRESENT);
@@ -237,6 +243,17 @@ void GameApp::SetPsoAndRootSig()
 	cubemapPSO.SetPixelShader(cubemapPS);
 	cubemapPSO.Finalize();
 	m_PSOs["cubemap"] = cubemapPSO;
+
+	// shader 
+	ComPtr<ID3DBlob> irradianceMapPS;
+	D3DReadFileToBlob(L"shader/irradianceMapPS.cso", &irradianceMapPS);
+	// pso
+	GraphicsPSO irradiancePSO = opaquePSO;
+	irradiancePSO.SetRasterizerState(rater);
+	irradiancePSO.SetVertexShader(cubemapVS);
+	irradiancePSO.SetPixelShader(irradianceMapPS);
+	irradiancePSO.Finalize();
+	m_PSOs["irradiance"] = irradiancePSO;
 }
 
 void GameApp::DrawRenderItems(GraphicsContext& gfxContext, std::vector<RenderItem*>& items)
@@ -304,6 +321,50 @@ void GameApp::DrawSceneToCubeMap(GraphicsContext& gfxContext)
 	}
 
 	gfxContext.TransitionResource(g_SceneCubeMapBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
+}
+
+void GameApp::ConvoluteCubeMap(GraphicsContext& gfxContext)
+{
+	auto width = Graphics::g_IrradianceMapBuffer.GetWidth();
+	auto height = Graphics::g_IrradianceMapBuffer.GetHeight();
+	D3D12_VIEWPORT mViewport = { 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
+	D3D12_RECT mScissorRect = { 0, 0, (LONG)width, (LONG)height };
+	gfxContext.SetViewportAndScissor(mViewport, mScissorRect);
+
+	gfxContext.TransitionResource(g_IrradianceMapBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
+	gfxContext.TransitionResource(g_CubeMapDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
+
+	//clear rtv
+	g_IrradianceMapBuffer.SetClearColor(Color(1.0f, 1.0f, 1.0f, 0.0f));
+	gfxContext.ClearColor(g_IrradianceMapBuffer);
+
+	gfxContext.SetRootSignature(m_RootSignature);
+
+	// structured buffer
+	gfxContext.SetBufferSRV(2, matBuffer);
+
+	// srv tables
+	gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
+
+	for (int i = 0; i < 6; ++i)
+	{
+		// clear dsv
+		gfxContext.ClearDepthAndStencil(g_CubeMapDepthBuffer);
+		// set render target
+		gfxContext.SetRenderTarget(g_IrradianceMapBuffer.GetRTV(i), g_CubeMapDepthBuffer.GetDSV());
+
+		// update passCB
+		XMStoreFloat4x4(&passConstant.ViewProj, XMMatrixTranspose(cubeCamera[i].GetViewProjMatrix()));
+		XMStoreFloat3(&passConstant.eyePosW, cubeCamera[i].GetPosition());
+		gfxContext.SetDynamicConstantBufferView(1, sizeof(passConstant), &passConstant);
+
+		// draw call
+		gfxContext.SetPipelineState(m_PSOs["irradiance"]);
+		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
+	}
+
+	gfxContext.TransitionResource(g_IrradianceMapBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
 }
 
 void GameApp::BuildCubeFaceCamera(float x, float y, float z)

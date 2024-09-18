@@ -49,6 +49,8 @@ float4 main(VertexOut input) : SV_TARGET
     //float fogAmount = saturate((distance - passConstants.gFogStart) / passConstants.gFogRange);
     //litColor = lerp(litColor, passConstants.gFogColor, fogAmount);
     
+    
+    
     litColor.a = diffuseAlbedo.a;
     
     return litColor;

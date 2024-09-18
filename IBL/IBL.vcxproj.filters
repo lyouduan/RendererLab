@@ -294,5 +294,6 @@
     <FxCompile Include="shader\VertexShader.hlsl" />
     <FxCompile Include="shader\cubemapVS.hlsl" />
     <FxCompile Include="shader\cubemapPS.hlsl" />
+    <FxCompile Include="shader\irradianceMapPS.hlsl" />
   </ItemGroup>
 </Project>
