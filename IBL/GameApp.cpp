@@ -90,13 +90,19 @@ void GameApp::Update(float deltaT)
 void GameApp::RenderScene(void)
 {
 	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Render");
+	
+	{
+		// draw cubemap
+		DrawSceneToCubeMap(gfxContext);
 
-	// draw cubemap
-	DrawSceneToCubeMap(gfxContext);
+		// irradiance cube map
+		ConvoluteCubeMap(gfxContext);
 
-	// irradiance map
-	ConvoluteCubeMap(gfxContext);
+		// prefilter cube map
+		PrefilterCubeMap(gfxContext);
 
+	}
+	
 	// 
 	// scene pass
 	// 
@@ -131,20 +137,24 @@ void GameApp::RenderScene(void)
 	// draw call
 	//if (!m_bRenderShapes)
 	{
+		gfxContext.SetDynamicDescriptor(3, 0, g_IrradianceMapBuffer.GetSRV());
 		gfxContext.SetPipelineState(m_PSOs["opaque"]);
 		DrawRenderItems(gfxContext, m_ShapeRenders[(int)RenderLayer::Opaque]);
 	}
 	
-	// dynamic cube mapping
-	//gfxContext.SetPipelineState(m_PSOs["opaque"]);
-	//gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
-	//DrawRenderItems(gfxContext, m_ShapeRenders[(int)RenderLayer::OpaqueDynamicReflectors]);
-
 	// draw sky box at last
 	gfxContext.SetPipelineState(m_PSOs["sky"]);
-	//gfxContext.SetDynamicDescriptor(3, 0, m_cubeMap[0].GetSRV());
-	gfxContext.SetDynamicDescriptor(3, 0, g_IrradianceMapBuffer.GetSRV());
-	DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
+	if(!m_bRenderShapes)
+	{
+		gfxContext.SetDynamicDescriptor(3, 0, g_IrradianceMapBuffer.GetSRV());
+		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
+	}
+	else
+	{
+		gfxContext.SetDynamicDescriptor(3, 0, g_PrefilterBuffer.GetSRV());
+		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
+	}
+
 
 	gfxContext.TransitionResource(g_DisplayPlane[g_CurrentBuffer], D3D12_RESOURCE_STATE_PRESENT);
 
@@ -211,6 +221,8 @@ void GameApp::SetPsoAndRootSig()
 	m_PSOs["alphaTested"] = alphaTestedPSO;
 
 	// cubemap 
+	ColorFormat = g_SceneCubeMapBuffer.GetFormat();
+	DepthFormat = g_CubeMapDepthBuffer.GetFormat();
 
 	// shader 
 	ComPtr<ID3DBlob> skyboxVS;
@@ -226,6 +238,7 @@ void GameApp::SetPsoAndRootSig()
 	rater.CullMode = D3D12_CULL_MODE_NONE; // 禁止
 	skyPSO.SetDepthStencilState(depthDesc);
 	skyPSO.SetRasterizerState(rater);
+	skyPSO.SetRenderTargetFormat(ColorFormat, DepthFormat);
 	skyPSO.SetVertexShader(skyboxVS);
 	skyPSO.SetPixelShader(skyboxPS);
 	skyPSO.Finalize();
@@ -237,8 +250,9 @@ void GameApp::SetPsoAndRootSig()
 	D3DReadFileToBlob(L"shader/cubemapVS.cso", &cubemapVS);
 	D3DReadFileToBlob(L"shader/cubemapPS.cso", &cubemapPS);
 	// pso
-	GraphicsPSO cubemapPSO = opaquePSO;
+	GraphicsPSO cubemapPSO = skyPSO;
 	cubemapPSO.SetRasterizerState(rater);
+	cubemapPSO.SetRenderTargetFormat(g_SceneCubeMapBuffer.GetFormat(), DepthFormat);
 	cubemapPSO.SetVertexShader(cubemapVS);
 	cubemapPSO.SetPixelShader(cubemapPS);
 	cubemapPSO.Finalize();
@@ -250,10 +264,23 @@ void GameApp::SetPsoAndRootSig()
 	// pso
 	GraphicsPSO irradiancePSO = opaquePSO;
 	irradiancePSO.SetRasterizerState(rater);
+	irradiancePSO.SetRenderTargetFormat(g_IrradianceMapBuffer.GetFormat(), DepthFormat);
 	irradiancePSO.SetVertexShader(cubemapVS);
 	irradiancePSO.SetPixelShader(irradianceMapPS);
 	irradiancePSO.Finalize();
 	m_PSOs["irradiance"] = irradiancePSO;
+
+	// shader 
+	ComPtr<ID3DBlob> prefilterPS;
+	D3DReadFileToBlob(L"shader/prefilterPS.cso", &prefilterPS);
+	// pso
+	GraphicsPSO prefilterPSO = opaquePSO;
+	prefilterPSO.SetRasterizerState(rater);
+	prefilterPSO.SetRenderTargetFormat(g_PrefilterBuffer.GetFormat(), DepthFormat);
+	prefilterPSO.SetVertexShader(cubemapVS);
+	prefilterPSO.SetPixelShader(prefilterPS);
+	prefilterPSO.Finalize();
+	m_PSOs["prefilter"] = prefilterPSO;
 }
 
 void GameApp::DrawRenderItems(GraphicsContext& gfxContext, std::vector<RenderItem*>& items)
@@ -367,6 +394,50 @@ void GameApp::ConvoluteCubeMap(GraphicsContext& gfxContext)
 	gfxContext.TransitionResource(g_IrradianceMapBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
 }
 
+void GameApp::PrefilterCubeMap(GraphicsContext& gfxContext)
+{
+	auto width = Graphics::g_PrefilterBuffer.GetWidth();
+	auto height = Graphics::g_PrefilterBuffer.GetHeight();
+	D3D12_VIEWPORT mViewport = { 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
+	D3D12_RECT mScissorRect = { 0, 0, (LONG)width, (LONG)height };
+	gfxContext.SetViewportAndScissor(mViewport, mScissorRect);
+
+	gfxContext.TransitionResource(g_PrefilterBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
+	gfxContext.TransitionResource(g_CubeMapDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
+
+	//clear rtv
+	g_PrefilterBuffer.SetClearColor(Color(1.0f, 1.0f, 1.0f, 0.0f));
+	gfxContext.ClearColor(g_PrefilterBuffer);
+
+	gfxContext.SetRootSignature(m_RootSignature);
+
+	// structured buffer
+	gfxContext.SetBufferSRV(2, matBuffer);
+
+	// srv tables
+	gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
+
+	for (int i = 0; i < 6; ++i)
+	{
+		// clear dsv
+		gfxContext.ClearDepthAndStencil(g_CubeMapDepthBuffer);
+		// set render target
+		gfxContext.SetRenderTarget(g_PrefilterBuffer.GetRTV(i), g_CubeMapDepthBuffer.GetDSV());
+
+		// update passCB
+		XMStoreFloat4x4(&passConstant.ViewProj, XMMatrixTranspose(cubeCamera[i].GetViewProjMatrix()));
+		XMStoreFloat3(&passConstant.eyePosW, cubeCamera[i].GetPosition());
+		gfxContext.SetDynamicConstantBufferView(1, sizeof(passConstant), &passConstant);
+
+		// draw call
+		gfxContext.SetPipelineState(m_PSOs["prefilter"]);
+		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
+	}
+
+	gfxContext.TransitionResource(g_PrefilterBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
+}
+
 void GameApp::BuildCubeFaceCamera(float x, float y, float z)
 {
 	// Generate the cube map about the given position.
@@ -410,19 +481,6 @@ void GameApp::BuildCubeFaceCamera(float x, float y, float z)
 
 void GameApp::BuildShapeRenderItems()
 {
-	auto globeRitem = std::make_unique<RenderItem>();
-	globeRitem->World = XMMatrixIdentity()* XMMatrixScaling(2.0f, 2.0f, 2.0f) * XMMatrixTranslation(0.0f, 2.0f, 0.0f);
-	globeRitem->ObjCBIndex = 7;
-	globeRitem->Mat = m_Materials["mirror0"].get();
-	globeRitem->Geo = m_Geometry["shapeGeo"].get();
-	globeRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
-	globeRitem->IndexCount = globeRitem->Geo->DrawArgs["sphere"].IndexCount;
-	globeRitem->StartIndexLocation = globeRitem->Geo->DrawArgs["sphere"].StartIndexLocation;
-	globeRitem->BaseVertexLocation = globeRitem->Geo->DrawArgs["sphere"].BaseVertexLocation;
-	m_ShapeRenders[(int)RenderLayer::OpaqueDynamicReflectors].push_back(globeRitem.get());
-
-	m_AllRenders.push_back(std::move(globeRitem));
-
 	XMMATRIX brickTexTransform = XMMatrixScaling(1.0f, 1.0f, 1.0f);
 	for (int row = 0; row < 7; ++row)
 	{
@@ -436,7 +494,7 @@ void GameApp::BuildShapeRenderItems()
 			SphereRitem->World = XMMatrixIdentity() * XMMatrixScaling(2.0f, 2.0f, 2.0f) * SphereWorld;
 			SphereRitem->TexTransform = brickTexTransform;
 			SphereRitem->ObjCBIndex = row * 7 + col;
-			SphereRitem->Mat = m_Materials["red"].get();
+			//SphereRitem->Mat = m_Materials[SphereRitem->ObjCBIndex].get();
 			SphereRitem->Geo = m_Geometry["shapeGeo"].get();
 			SphereRitem->PrimitiveType = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 			SphereRitem->IndexCount = SphereRitem->Geo->DrawArgs["sphere"].IndexCount;
@@ -455,8 +513,8 @@ void GameApp::BuildSkyboxRenderItems()
 {
 	auto box = std::make_unique<RenderItem>();
 	box->World = XMMatrixIdentity();
-	box->ObjCBIndex = 0;
-	box->Mat = m_Materials["sky"].get();
+	box->ObjCBIndex = m_Materials.size()-1;
+	//box->Mat = m_Materials["sky"].get();
 	box->Geo = m_Geometry["shapeGeo"].get();
 	box->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
 	box->IndexCount = box->Geo->DrawArgs["box"].IndexCount;
@@ -604,9 +662,9 @@ void GameApp::BuildMaterials()
 			red->Name = row * 7 + col;
 			red->DiffuseMapIndex = 0;
 			red->DiffuseAlbedo = XMFLOAT4(0.8f, 0.0f, 0.0f, 1.0f);
-			auto f0 = std::clamp((float)row / 7.0f, 0.00f, 1.0f);
+			auto f0 = std::clamp((float)col / 7.0f, 0.00f, 1.0f);
 			red->FresnelR0 = XMFLOAT3(f0, f0, f0);
-			red->Roughness = std::clamp((float)col / 7.0f, 0.05f, 1.0f);
+			red->Roughness = std::clamp((float)row / 7.0f, 0.05f, 1.0f);
 
 			m_Materials[red->Name] = std::move(red);
 		}
@@ -617,7 +675,7 @@ void GameApp::BuildMaterials()
 	sky->DiffuseMapIndex = 1;
 	sky->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	sky->Roughness = 1.0f;
+	sky->Roughness = 0.8f;
 	m_Materials[sky->Name] = std::move(sky);
 
 	std::vector<MaterialConstants> mat;

@@ -15,6 +15,7 @@ namespace Graphics
 	CubeMapBuffer g_SceneCubeMapBuffer;
 
 	CubeMapBuffer g_IrradianceMapBuffer;
+	CubeMapBuffer g_PrefilterBuffer;
 }
 
 #define T2X_COLOR_FORMAT DXGI_FORMAT_R10G10B10A2_UNORM
@@ -26,7 +27,8 @@ void Graphics::InitializeRenderingBuffers(uint32_t width, uint32_t height)
 	g_SceneCubeMapBuffer.Create(L"Cubemap Buffer", 512, 512, 1, HDR_MOTION_FORMAT);
 	g_CubeMapDepthBuffer.Create(L"Cubemap Depth Buffer", 512, 512, DSV_FORMAT);
 
-	g_IrradianceMapBuffer.Create(L"Cubemap Buffer", 512, 512, 1, HDR_MOTION_FORMAT);
+	g_IrradianceMapBuffer.Create(L"irradiance Buffer", 512, 512, 1, HDR_MOTION_FORMAT);
+	g_PrefilterBuffer.Create(L"prefilter Buffer", 512, 512, 1, HDR_MOTION_FORMAT);
 
 	g_SceneDepthBuffer.Create(L"Scene Depth Buffer", width, height, DSV_FORMAT);
 }
@@ -42,4 +44,5 @@ void Graphics::DestroyRenderingBuffers()
 
 	g_SceneDepthBuffer.Destroy();
 	g_IrradianceMapBuffer.Destroy();
+	g_PrefilterBuffer.Destroy();
 }

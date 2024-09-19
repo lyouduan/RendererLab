@@ -66,6 +66,7 @@ private:
 	void DrawRenderItems(GraphicsContext& gfxContext, std::vector<RenderItem*>& items);
 	void DrawSceneToCubeMap(GraphicsContext& gfxContext);
 	void ConvoluteCubeMap(GraphicsContext& gfxContext);
+	void PrefilterCubeMap(GraphicsContext& gfxContext);
 
 	void BuildCubeFaceCamera(float x=0.0, float y=0.0, float z=0.0);
 

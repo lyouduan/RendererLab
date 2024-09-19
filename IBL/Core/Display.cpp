@@ -5,7 +5,7 @@
 #include "ColorBuffer.h"
 #include "BufferManager.h"
 
-DXGI_FORMAT SwapChainFormat = DXGI_FORMAT_R10G10B10A2_UNORM;
+DXGI_FORMAT SwapChainFormat = DXGI_FORMAT_R16G16B16A16_FLOAT;
 
 using namespace Graphics;
 

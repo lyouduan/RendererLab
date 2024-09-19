@@ -1,9 +1,13 @@
 #include "common.hlsli"
 #include "LightingUtil.hlsli"
 
-
-TextureCube gCubeMap : register(t0);
+TextureCube gIrradianceCubeMap : register(t0);
 Texture2D gDiffuseMap[8] : register(t1);
+
+float3 fresnelSchlick(float cosTheta, float3 F0)
+{
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
 
 float4 main(VertexOut input) : SV_TARGET
 {
@@ -13,7 +17,6 @@ float4 main(VertexOut input) : SV_TARGET
     float roughness = matData.gRoughness;
     
     uint diffuseMapIndex = matData.gDiffuseMapIndex;
-    
     
     diffuseAlbedo *= gDiffuseMap[diffuseMapIndex].Sample(gsamLinearClamp, input.tex);
 // alpha tested
@@ -25,9 +28,6 @@ float4 main(VertexOut input) : SV_TARGET
     float distance = length(toEyeW);
     toEyeW /= distance; // normalize
     
-    // 
-    float4 ambient = passConstants.gAmbientLight * diffuseAlbedo;
-    
     const float shininess = 1.0f - roughness;
     
     Material mat = { diffuseAlbedo, fresnelR0, shininess };
@@ -35,23 +35,20 @@ float4 main(VertexOut input) : SV_TARGET
     float4 directLight = ComputeLighting(passConstants.Lights, mat, input.positionW,
         input.normal, toEyeW, shadowFactor);
     
-    float4 litColor = ambient + directLight;
     
-    // reflection 
-    //float3 r = reflect(-toEyeW, input.normal);
-    //float4 reflectionColor = gCubeMap.Sample(gsamLinearClamp, r);
-    //float3 fresnelFactor = SchlickFresnel(fresnelR0, input.normal, r);
-    //
-    //litColor.rgb += shininess * reflectionColor.rgb * fresnelFactor;
+    // ambient lighting (use IBL as the ambient term)
     
+    float3 Ks = fresnelSchlick(max(dot(input.normal, toEyeW), 0.0), fresnelR0);
+    float3 Kd = 1.0 - Ks;
+    float3 irradiance = gIrradianceCubeMap.Sample(gsamLinearClamp, input.normal).rgb;
+    float3 diffuse = irradiance * diffuseAlbedo.rgb;
+    float3 ambient = Kd * diffuse * passConstants.gAmbientLight.rgb;
     
-    // fog
-    //float fogAmount = saturate((distance - passConstants.gFogStart) / passConstants.gFogRange);
-    //litColor = lerp(litColor, passConstants.gFogColor, fogAmount);
+    float3 litColor = ambient + directLight.rgb;
     
+    // HDR tonemap and gamma correct
+    litColor = litColor / (litColor + float3(1.0, 1.0, 1.0));
+    litColor = pow(litColor, 1.0 / 2.2);
     
-    
-    litColor.a = diffuseAlbedo.a;
-    
-    return litColor;
+    return float4(litColor, diffuseAlbedo.a);
 }

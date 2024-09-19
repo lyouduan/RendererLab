@@ -15,7 +15,7 @@ float4 main(VertexOut pin) : SV_TARGET
     float3 right = normalize(cross(up, N));
     up = normalize(cross(N, right));
     
-    float sampleDelta = 0.05;
+    float sampleDelta = 0.15;
     float nrSamples = 0.0;
     for (float phi = 0.0; phi < 2.0 * PI; phi += sampleDelta)
     {
@@ -30,8 +30,8 @@ float4 main(VertexOut pin) : SV_TARGET
             nrSamples++;
         }
     }
+    
     irradiance = PI * irradiance * (1.0 / float(nrSamples));
-    //irradiance = pow(irradiance.rgb, 1/2.2);
     
     return float4(irradiance, 1.0);
 }
