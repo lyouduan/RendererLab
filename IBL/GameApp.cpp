@@ -46,6 +46,7 @@ void GameApp::Startup(void)
 	// prepare shape and add material
 	BuildShapeGeometry();
 	BuildBoxGeometry();
+	BuildQuadGeometry();
 
 	// build render items
 	BuildShapeRenderItems();
@@ -101,6 +102,8 @@ void GameApp::RenderScene(void)
 		// prefilter cube map
 		PrefilterCubeMap(gfxContext);
 
+		// brdf LUT
+		Brdf2DLUT(gfxContext);
 	}
 	
 	// 
@@ -155,6 +158,7 @@ void GameApp::RenderScene(void)
 		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
 	}
 
+	gfxContext.CopyBuffer(g_DisplayPlane[g_CurrentBuffer], g_Brdf2DLutBuffer);
 
 	gfxContext.TransitionResource(g_DisplayPlane[g_CurrentBuffer], D3D12_RESOURCE_STATE_PRESENT);
 
@@ -281,6 +285,21 @@ void GameApp::SetPsoAndRootSig()
 	prefilterPSO.SetPixelShader(prefilterPS);
 	prefilterPSO.Finalize();
 	m_PSOs["prefilter"] = prefilterPSO;
+
+
+	// shader 
+	ComPtr<ID3DBlob> brdfVS;
+	ComPtr<ID3DBlob> brdfPS;
+	D3DReadFileToBlob(L"shader/brdfVS.cso", &brdfVS);
+	D3DReadFileToBlob(L"shader/brdfPS.cso", &brdfPS);
+	// pso
+	GraphicsPSO brdfPSO = opaquePSO;
+	//brdfPSO.SetRasterizerState(rater);
+	brdfPSO.SetRenderTargetFormat(g_Brdf2DLutBuffer.GetFormat(), DepthFormat);
+	brdfPSO.SetVertexShader(brdfVS);
+	brdfPSO.SetPixelShader(brdfPS);
+	brdfPSO.Finalize();
+	m_PSOs["brdf"] = brdfPSO;
 }
 
 void GameApp::DrawRenderItems(GraphicsContext& gfxContext, std::vector<RenderItem*>& items)
@@ -388,7 +407,7 @@ void GameApp::ConvoluteCubeMap(GraphicsContext& gfxContext)
 
 		// draw call
 		gfxContext.SetPipelineState(m_PSOs["irradiance"]);
-		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
+		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Cubemap]);
 	}
 
 	gfxContext.TransitionResource(g_IrradianceMapBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
@@ -432,10 +451,48 @@ void GameApp::PrefilterCubeMap(GraphicsContext& gfxContext)
 
 		// draw call
 		gfxContext.SetPipelineState(m_PSOs["prefilter"]);
-		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
+		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Cubemap]);
 	}
 
 	gfxContext.TransitionResource(g_PrefilterBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
+}
+
+void GameApp::Brdf2DLUT(GraphicsContext& gfxContext)
+{
+	auto width = Graphics::g_Brdf2DLutBuffer.GetWidth();
+	auto height = Graphics::g_Brdf2DLutBuffer.GetHeight();
+	D3D12_VIEWPORT mViewport = { 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
+	D3D12_RECT mScissorRect = { 0, 0, (LONG)width, (LONG)height };
+	gfxContext.SetViewportAndScissor(mViewport, mScissorRect);
+
+	gfxContext.TransitionResource(g_Brdf2DLutBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
+	gfxContext.TransitionResource(g_SceneDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
+
+	//clear rtv
+	g_Brdf2DLutBuffer.SetClearColor(Color(1.0f, 1.0f, 1.0f, 0.0f));
+	gfxContext.ClearColor(g_Brdf2DLutBuffer);
+
+	gfxContext.SetRootSignature(m_RootSignature);
+
+	// structured buffer
+	gfxContext.SetBufferSRV(2, matBuffer);
+
+	// srv tables
+	gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
+	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
+
+	{
+		// clear dsv
+		gfxContext.ClearDepthAndStencil(g_SceneDepthBuffer);
+		// set render target
+		gfxContext.SetRenderTarget(g_Brdf2DLutBuffer.GetRTV(), g_SceneDepthBuffer.GetDSV());
+
+		// draw call
+		gfxContext.SetPipelineState(m_PSOs["brdf"]);
+		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Quad]);
+	}
+
+	gfxContext.TransitionResource(g_Brdf2DLutBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
 }
 
 void GameApp::BuildCubeFaceCamera(float x, float y, float z)
@@ -523,7 +580,21 @@ void GameApp::BuildSkyboxRenderItems()
 
 	m_SkyboxRenders[(int)RenderLayer::Cubemap].push_back(box.get());
 	m_SkyboxRenders[(int)RenderLayer::Skybox].push_back(box.get());
+
+	auto quad = std::make_unique<RenderItem>();
+	quad->World = XMMatrixIdentity();
+	quad->ObjCBIndex = m_Materials.size() - 1;
+	//box->Mat = m_Materials["sky"].get();
+	quad->Geo = m_Geometry["quadGeo"].get();
+	quad->PrimitiveType = D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
+	quad->IndexCount = quad->Geo->DrawArgs["quad"].IndexCount;
+	quad->BaseVertexLocation = quad->Geo->DrawArgs["quad"].BaseVertexLocation;
+	quad->StartIndexLocation = quad->Geo->DrawArgs["quad"].StartIndexLocation;
+
+	m_SkyboxRenders[(int)RenderLayer::Quad].push_back(quad.get());
+
 	m_AllRenders.push_back(std::move(box));
+	m_AllRenders.push_back(std::move(quad));
 }
 
 void GameApp::BuildShapeGeometry()
@@ -652,6 +723,41 @@ void GameApp::BuildBoxGeometry()
 	m_Geometry["boxGeo"] = std::move(geo);
 }
 
+void GameApp::BuildQuadGeometry()
+{
+	//GeometryGenerator geoGen;
+	//GeometryGenerator::MeshData quad = geoGen.CreateQuad(-1.0, 1.0, 2, 2, 1.0);
+	//std::vector<Vertex> vertices.resize(quad.Vertices.size());
+	//for (int i = 0; i < quad.Vertices.size(); ++i)
+	//{
+	//	vertices[i].position = quad.Vertices[i].Position;
+	//	vertices[i].tex = quad.Vertices[i].TexC;
+	//}
+	//std::vector<std::uint16_t> indices = quad.GetIndices16();
+
+	std::vector<Vertex> vertices;
+	vertices.push_back({ XMFLOAT3{ -1.0f, 1.0f, 1.0f }, XMFLOAT3{ 0.0f,  1.0f, 0.0f }, XMFLOAT2{ 0.0f, 1.0f } });
+	vertices.push_back({ XMFLOAT3{ -1.0f,-1.0f, 1.0f }, XMFLOAT3{ 0.0f,  1.0f, 0.0f }, XMFLOAT2{ 0.0f, 0.0f } });
+	vertices.push_back({ XMFLOAT3{  1.0f, 1.0f, 1.0f }, XMFLOAT3{ 0.0f,  1.0f, 0.0f }, XMFLOAT2{ 1.0f, 1.0f } });
+	vertices.push_back({ XMFLOAT3{  1.0f,-1.0f, 1.0f }, XMFLOAT3{ 0.0f,  1.0f, 0.0f }, XMFLOAT2{ 1.0f, 0.0f } });
+		
+	std::vector<std::uint16_t> indices = { 0, 1, 2, 1, 3, 2}; // 右手 逆时针
+	
+	auto geo = std::make_unique<MeshGeometry>();
+	geo->name = "quadGeo";
+	geo->m_VertexBuffer.Create(L"vertex buff", (UINT)vertices.size(), sizeof(Vertex), vertices.data());
+	geo->m_IndexBuffer.Create(L"Index Buffer", (UINT)indices.size(), sizeof(std::uint16_t), indices.data());
+
+	SubmeshGeometry submesh;
+	submesh.IndexCount = (UINT)indices.size();
+	submesh.StartIndexLocation = 0;
+	submesh.BaseVertexLocation = 0;
+
+	geo->DrawArgs["quad"] = std::move(submesh);
+
+	m_Geometry["quadGeo"] = std::move(geo);
+}
+
 void GameApp::BuildMaterials()
 {
 	for (int row = 0; row < 7; ++row)
@@ -675,7 +781,7 @@ void GameApp::BuildMaterials()
 	sky->DiffuseMapIndex = 1;
 	sky->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
-	sky->Roughness = 0.8f;
+	sky->Roughness = 0.5f;
 	m_Materials[sky->Name] = std::move(sky);
 
 	std::vector<MaterialConstants> mat;

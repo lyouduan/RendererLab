@@ -296,5 +296,7 @@
     <FxCompile Include="shader\cubemapPS.hlsl" />
     <FxCompile Include="shader\irradianceMapPS.hlsl" />
     <FxCompile Include="shader\prefilterPS.hlsl" />
+    <FxCompile Include="shader\brdfVS.hlsl" />
+    <FxCompile Include="shader\brdfPS.hlsl" />
   </ItemGroup>
 </Project>

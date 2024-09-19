@@ -19,6 +19,7 @@ enum class RenderLayer : int
 	OpaqueDynamicReflectors,
 	Cubemap,
 	Skybox,
+	Quad,
 	Count
 };
 
@@ -67,6 +68,7 @@ private:
 	void DrawSceneToCubeMap(GraphicsContext& gfxContext);
 	void ConvoluteCubeMap(GraphicsContext& gfxContext);
 	void PrefilterCubeMap(GraphicsContext& gfxContext);
+	void Brdf2DLUT(GraphicsContext& gfxContext);
 
 	void BuildCubeFaceCamera(float x=0.0, float y=0.0, float z=0.0);
 
@@ -75,6 +77,7 @@ private:
 
 	void BuildShapeGeometry();
 	void BuildBoxGeometry();
+	void BuildQuadGeometry();
 	
 	void BuildMaterials();
 	void LoadTextures();

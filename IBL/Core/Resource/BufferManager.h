@@ -5,6 +5,7 @@
 
 namespace Graphics
 {
+	extern ColorBuffer   g_Brdf2DLutBuffer;
 	extern CubeMapBuffer g_SceneCubeMapBuffer;
 	extern CubeMapBuffer g_IrradianceMapBuffer;
 	extern CubeMapBuffer g_PrefilterBuffer;
