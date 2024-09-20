@@ -44,6 +44,9 @@ float4 main(VertexOut input) : SV_TARGET
     float3 diffuse = irradiance * diffuseAlbedo.rgb;
     float3 ambient = Kd * diffuse * passConstants.gAmbientLight.rgb;
     
+
+    const float MAX_REFLECTION_LOD = 4.0;
+    
     float3 litColor = ambient + directLight.rgb;
     
     // HDR tonemap and gamma correct

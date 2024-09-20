@@ -35,7 +35,7 @@ struct PassConstants
     float4 gFogColor;
     float gFogStart;
     float gFogRange;
-    float pad1;
+    float passRoughness;
     float pad2;
 };
 
