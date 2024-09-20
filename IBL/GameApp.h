@@ -10,6 +10,7 @@
 #include <memory>
 #include "TextureManager.h"
 #include "Camera.h"
+#include "CommandContext.h"
 
 enum class RenderLayer : int
 {

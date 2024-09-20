@@ -30,7 +30,7 @@ void CubeMapBuffer::CreateDerivedViews(ID3D12Device* Device, DXGI_FORMAT Format,
 	SRVDesc.Format = Format;
 	SRVDesc.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
 	SRVDesc.ViewDimension = D3D12_SRV_DIMENSION_TEXTURECUBE; // cube map
-	SRVDesc.TextureCube.MipLevels = 1;
+	SRVDesc.TextureCube.MipLevels = NumMips;
 	SRVDesc.TextureCube.MostDetailedMip = 0;
 
 	// cpu visible descriptor heap 
@@ -45,14 +45,19 @@ void CubeMapBuffer::CreateDerivedViews(ID3D12Device* Device, DXGI_FORMAT Format,
 	RTVDesc.Format = Format;
 	RTVDesc.ViewDimension = D3D12_RTV_DIMENSION_TEXTURE2DARRAY;
 	RTVDesc.Texture2DArray.ArraySize = 1;
-	RTVDesc.Texture2DArray.MipSlice = 0;
-	// Create the render target view
-	for (uint32_t i = 0; i < 6; ++i)
-	{
-		RTVDesc.Texture2DArray.FirstArraySlice = i;
-		if (m_RTVHandle[i].ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
-			m_RTVHandle[i] = Graphics::AllocateDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
 
-		Device->CreateRenderTargetView(Resource, &RTVDesc, m_RTVHandle[i]);
+	for (int mip = 0; mip < NumMips; ++mip)
+	{
+		RTVDesc.Texture2DArray.MipSlice = mip;
+		// Create the render target view
+		for (uint32_t i = 0; i < 6; ++i)
+		{
+			RTVDesc.Texture2DArray.FirstArraySlice = i;
+			if (m_RTVHandle[mip * 6 + i].ptr == D3D12_GPU_VIRTUAL_ADDRESS_UNKNOWN)
+				m_RTVHandle[mip * 6 + i] = Graphics::AllocateDescriptor(D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+
+			Device->CreateRenderTargetView(Resource, &RTVDesc, m_RTVHandle[mip * 6 + i]);
+		}
 	}
+	
 }

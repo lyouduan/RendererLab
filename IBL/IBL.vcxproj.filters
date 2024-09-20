@@ -280,23 +280,23 @@
     <None Include="Core\Math\Functions.inl">
       <Filter>Header Files</Filter>
     </None>
-    <None Include="shader\common.hlsli" />
-    <None Include="shader\LightingUtil.hlsli" />
+    <None Include="shader\shaders\common.hlsli" />
+    <None Include="shader\shaders\LightingUtil.hlsli" />
     <None Include="shader\PixelShader.cso" />
     <None Include="shader\skyboxPS.cso" />
     <None Include="shader\skyboxVS.cso" />
     <None Include="shader\VertexShader.cso" />
   </ItemGroup>
   <ItemGroup>
-    <FxCompile Include="shader\PixelShader.hlsl" />
-    <FxCompile Include="shader\skyboxPS.hlsl" />
-    <FxCompile Include="shader\skyboxVS.hlsl" />
-    <FxCompile Include="shader\VertexShader.hlsl" />
-    <FxCompile Include="shader\cubemapVS.hlsl" />
-    <FxCompile Include="shader\cubemapPS.hlsl" />
-    <FxCompile Include="shader\irradianceMapPS.hlsl" />
-    <FxCompile Include="shader\prefilterPS.hlsl" />
-    <FxCompile Include="shader\brdfVS.hlsl" />
-    <FxCompile Include="shader\brdfPS.hlsl" />
+    <FxCompile Include="shader\shaders\PixelShader.hlsl" />
+    <FxCompile Include="shader\shaders\skyboxPS.hlsl" />
+    <FxCompile Include="shader\shaders\skyboxVS.hlsl" />
+    <FxCompile Include="shader\shaders\VertexShader.hlsl" />
+    <FxCompile Include="shader\shaders\cubemapVS.hlsl" />
+    <FxCompile Include="shader\shaders\cubemapPS.hlsl" />
+    <FxCompile Include="shader\shaders\irradianceMapPS.hlsl" />
+    <FxCompile Include="shader\shaders\prefilterPS.hlsl" />
+    <FxCompile Include="shader\shaders\brdfVS.hlsl" />
+    <FxCompile Include="shader\shaders\brdfPS.hlsl" />
   </ItemGroup>
 </Project>

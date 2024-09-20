@@ -67,7 +67,7 @@ float4 main(VertexOut pin) : SV_TARGET
     float3 N = normalize(pin.positionW);
     
     MaterialData matData = gMaterialData[objConstants.gMaterialIndex];
-    float roughness = matData.gRoughness;
+    float roughness = passConstants.pad1;
     
     // make the simplifying assumption that V equals R equals the normal
     float3 R = N;

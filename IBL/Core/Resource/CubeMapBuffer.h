@@ -33,7 +33,7 @@ private:
 	Color m_ClearColor;
 
 	D3D12_CPU_DESCRIPTOR_HANDLE m_SRVHandle;
-	D3D12_CPU_DESCRIPTOR_HANDLE m_RTVHandle[6];
+	D3D12_CPU_DESCRIPTOR_HANDLE m_RTVHandle[24];
 	uint32_t m_NumMipMaps;
 	uint32_t m_SamleCount;
 };

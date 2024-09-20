@@ -57,6 +57,7 @@ void GameApp::Startup(void)
 
 	// set PSO and Root Signature
 	SetPsoAndRootSig();
+	
 }
 
 void GameApp::Cleanup(void)
@@ -90,22 +91,21 @@ void GameApp::Update(float deltaT)
 
 void GameApp::RenderScene(void)
 {
-	GraphicsContext& gfxContext = GraphicsContext::Begin(L"Scene Render");
-	
+	GraphicsContext& gfxContext = GraphicsContext::Begin(L"");
+
 	{
 		// draw cubemap
 		DrawSceneToCubeMap(gfxContext);
 
 		// irradiance cube map
-		ConvoluteCubeMap(gfxContext);
+		//ConvoluteCubeMap(gfxContext);
 
 		// prefilter cube map
 		PrefilterCubeMap(gfxContext);
 
 		// brdf LUT
-		Brdf2DLUT(gfxContext);
+		//Brdf2DLUT(gfxContext);
 	}
-	
 	// 
 	// scene pass
 	// 
@@ -149,7 +149,7 @@ void GameApp::RenderScene(void)
 	gfxContext.SetPipelineState(m_PSOs["sky"]);
 	if(!m_bRenderShapes)
 	{
-		gfxContext.SetDynamicDescriptor(3, 0, g_IrradianceMapBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(3, 0, g_PrefilterBuffer.GetSRV());
 		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
 	}
 	else
@@ -158,7 +158,7 @@ void GameApp::RenderScene(void)
 		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
 	}
 
-	gfxContext.CopyBuffer(g_DisplayPlane[g_CurrentBuffer], g_Brdf2DLutBuffer);
+	//gfxContext.CopyBuffer(g_DisplayPlane[g_CurrentBuffer], g_Brdf2DLutBuffer);
 
 	gfxContext.TransitionResource(g_DisplayPlane[g_CurrentBuffer], D3D12_RESOURCE_STATE_PRESENT);
 
@@ -417,9 +417,7 @@ void GameApp::PrefilterCubeMap(GraphicsContext& gfxContext)
 {
 	auto width = Graphics::g_PrefilterBuffer.GetWidth();
 	auto height = Graphics::g_PrefilterBuffer.GetHeight();
-	D3D12_VIEWPORT mViewport = { 0.0f, 0.0f, (float)width, (float)height, 0.0f, 1.0f };
-	D3D12_RECT mScissorRect = { 0, 0, (LONG)width, (LONG)height };
-	gfxContext.SetViewportAndScissor(mViewport, mScissorRect);
+	
 
 	gfxContext.TransitionResource(g_PrefilterBuffer, D3D12_RESOURCE_STATE_RENDER_TARGET, true);
 	gfxContext.TransitionResource(g_CubeMapDepthBuffer, D3D12_RESOURCE_STATE_DEPTH_WRITE, true);
@@ -437,23 +435,32 @@ void GameApp::PrefilterCubeMap(GraphicsContext& gfxContext)
 	gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
 	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
 
-	for (int i = 0; i < 6; ++i)
+	passConstant.pad1 = 0.1f;
+	auto mips = g_PrefilterBuffer.GetResource()->GetDesc().MipLevels;
+	for (int mip = 0; mip < mips; ++mip)
 	{
-		// clear dsv
-		gfxContext.ClearDepthAndStencil(g_CubeMapDepthBuffer);
-		// set render target
-		gfxContext.SetRenderTarget(g_PrefilterBuffer.GetRTV(i), g_CubeMapDepthBuffer.GetDSV());
+		D3D12_VIEWPORT mViewport = { 0.0f, 0.0f, (float)(width / pow(2, mip)), (float)(height / pow(2, mip)), 0.0f, 1.0f};
+		D3D12_RECT mScissorRect = { 0, 0, (LONG)(width / pow(2, mip)), (LONG)(height / pow(2, mip)) };
+		gfxContext.SetViewportAndScissor(mViewport, mScissorRect);
 
-		// update passCB
-		XMStoreFloat4x4(&passConstant.ViewProj, XMMatrixTranspose(cubeCamera[i].GetViewProjMatrix()));
-		XMStoreFloat3(&passConstant.eyePosW, cubeCamera[i].GetPosition());
-		gfxContext.SetDynamicConstantBufferView(1, sizeof(passConstant), &passConstant);
+		passConstant.pad1 = 0.1 + 0.2 * mip;
+		for (int i = 0; i < 6; ++i)
+		{
+			// clear dsv
+			gfxContext.ClearDepthAndStencil(g_CubeMapDepthBuffer);
+			// set render target
+			gfxContext.SetRenderTarget(g_PrefilterBuffer.GetRTV(mip * 6 + i), g_CubeMapDepthBuffer.GetDSV());
 
-		// draw call
-		gfxContext.SetPipelineState(m_PSOs["prefilter"]);
-		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Cubemap]);
+			// update passCB
+			XMStoreFloat4x4(&passConstant.ViewProj, XMMatrixTranspose(cubeCamera[i].GetViewProjMatrix()));
+			XMStoreFloat3(&passConstant.eyePosW, cubeCamera[i].GetPosition());
+			gfxContext.SetDynamicConstantBufferView(1, sizeof(passConstant), &passConstant);
+
+			// draw call
+			gfxContext.SetPipelineState(m_PSOs["prefilter"]);
+			DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Cubemap]);
+		}
 	}
-
 	gfxContext.TransitionResource(g_PrefilterBuffer, D3D12_RESOURCE_STATE_GENERIC_READ, true);
 }
 
