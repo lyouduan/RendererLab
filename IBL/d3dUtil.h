@@ -16,7 +16,8 @@ struct Material
 	DirectX::XMMATRIX MatTransform = DirectX::XMMatrixIdentity();
 
 	UINT DiffuseMapIndex = 0;
-	UINT MaterialPad[3];
+	UINT metallic  = 0.0;
+	UINT MaterialPad[2];
 
 };
 
@@ -51,8 +52,10 @@ __declspec(align(16)) struct MaterialConstants
 {
 	DirectX::XMFLOAT4X4 MatTransform;
 	DirectX::XMFLOAT4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
-	DirectX::XMFLOAT3 FresnelR0 = { 1.0f, 1.0f, 1.0f };
+	float metallic = 0.0f;
 	float Roughness = 0.25f; 
+	float pad0;
+	float pad1;
 	UINT DiffuseMapIndex = 0;
 	UINT MaterialPad[3];
 };
@@ -87,6 +90,6 @@ __declspec(align(16)) struct PassConstants
 	DirectX::XMFLOAT4 fogColor = { 0.7f, 0.7f, 0.7f, 1.0f };
 	float fogStart = 5.0f;
 	float fogRange = 100.0;
-	float pad1;
-	float pad2;
+	float roughness;
+	float resulotion;
 };

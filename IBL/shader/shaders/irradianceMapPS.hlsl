@@ -1,7 +1,8 @@
 #include "common.hlsli"
 
 TextureCube environmentMap : register(t0);
-Texture2D gDiffuseMap[8] : register(t1);
+TextureCube prefilterMap : register(t1);
+Texture2D gDiffuseMap[8] : register(t2);
 
 const float PI = 3.14159265359;
 

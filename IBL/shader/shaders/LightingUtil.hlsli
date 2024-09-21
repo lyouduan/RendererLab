@@ -4,11 +4,11 @@
 #include "common.hlsli"
 
 #ifndef NUM_DIR_LIGHTS
-#define NUM_DIR_LIGHTS 3
+#define NUM_DIR_LIGHTS 0
 #endif
 
 #ifndef NUM_POINT_LIGHTS
-#define NUM_POINT_LIGHTS 0
+#define NUM_POINT_LIGHTS 2
 #endif
 
 #ifndef NUM_SPOT_LIGHTS
@@ -17,44 +17,59 @@
 
 struct Material
 {
-    float4 DiffuseAlbedo;
-    float3 FresnelR0;
-    float Shininess;
+    float4 gDiffuseAlbedo;
+    float3 F0;
+    float gRoughness;
+    float Metallic;
 };
 
-float CalcAttenuation(float d, float falloffStart, float falloffEnd)
+static const float PI1 = 3.14159265359;
+
+float DistributionGGX(float3 N, float3 H, float roughness)
 {
-    // Linear falloff.
-    return saturate((falloffEnd - d) / (falloffEnd - falloffStart));
+    float a = roughness * roughness;
+    float a2 = a * a;
+    float NdotH = saturate(dot(N, H));
+    float NdotH2 = NdotH * NdotH;
+    
+    float nom = a2;
+    float denom = (NdotH2 * (a2 - 1.0) + 1.0);
+    denom = PI1 * denom * denom;
+    
+    return 1.0;
 }
 
-// Schlick gives an approximation to Fresnel reflectance (see pg. 233 "Real-Time Rendering 3rd Ed.").
-// R0 = ( (n-1)/(n+1) )^2, where n is the index of refraction.
-float3 SchlickFresnel(float3 R0, float3 normal, float3 lightVec)
+float GeometrySchlickGGX(float NdotV, float roughness)
 {
-    float cosIncidentAngle = saturate(dot(normal, lightVec));
+    float r = (roughness + 1.0);
+    float k = (r * r) / 8.0;
 
-    float f0 = 1.0f - cosIncidentAngle;
-    float3 reflectPercent = R0 + (1.0f - R0) * (f0 * f0 * f0 * f0 * f0);
+    float nom = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
 
-    return reflectPercent;
+    return nom / denom;
 }
 
-float3 BlinnPhong(float3 lightStrength, float3 lightVec, float3 normal, float3 toEye, Material mat)
+float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
 {
-    const float m = mat.Shininess * 256.0f;
-    float3 halfVec = normalize(toEye + lightVec);
+    float NdotV = saturate(dot(N, V));
+    float NdotL = saturate(dot(N, L));
+    float ggx2 = GeometrySchlickGGX(NdotV, roughness);
+    float ggx1 = GeometrySchlickGGX(NdotL, roughness);
 
-    float roughnessFactor = (m + 8.0f) * pow(max(dot(halfVec, normal), 0.0f), m) / 8.0f;
-    float3 fresnelFactor = SchlickFresnel(mat.FresnelR0, halfVec, lightVec);
+    return ggx1 * ggx2;
+}
 
-    float3 specAlbedo = fresnelFactor * roughnessFactor;
+float3 SchlickFresnel(float3 R0, float cosTheta)
+{
+    float f0 = saturate(1.0f - cosTheta);
 
-    // Our spec formula goes outside [0,1] range, but we are 
-    // doing LDR rendering.  So scale it down a bit.
-    //specAlbedo = specAlbedo / (specAlbedo + 1.0f);
+    return R0 + (1.0f - R0) * (f0 * f0 * f0 * f0 * f0);
+}
 
-    return (mat.DiffuseAlbedo.rgb + specAlbedo) * lightStrength;
+float3 CT(float3 lightStrength, float3 lightVec, float3 normal, float3 toEye, Material mat)
+{
+    
 }
 
 //---------------------------------------------------------------------------------------
@@ -68,75 +83,44 @@ float3 ComputeDirectionalLight(Light L, Material mat, float3 normal, float3 toEy
     // Scale light down by Lambert's cosine law.
     float ndotl = max(dot(lightVec, normal), 0.0f);
     float3 lightStrength = L.Strength * ndotl;
-
-    return BlinnPhong(lightStrength, lightVec, normal, toEye, mat);
+    
+    return CT(lightStrength, lightVec, normal, toEye, mat);
 }
 
 //---------------------------------------------------------------------------------------
-// Evaluates the lighting equation for point lights.
+// Evaluates the lighting equation for directional lights.
 //---------------------------------------------------------------------------------------
-float3 ComputePointLight(Light L, Material mat, float3 pos, float3 normal, float3 toEye)
+float3 ComputePointLight(Light L, Material mat, float3 normal, float3 toEye, float3 pos)
 {
-    // The vector from the surface to the light.
+    // The light vector aims opposite the direction the light rays travel.
     float3 lightVec = L.Position - pos;
+    float3 H = normalize(toEye + lightVec);
+    
+    float roughness = mat.gRoughness;
+    
+    // cook-torrance brdf
+    float NDF = DistributionGGX(normal, H, roughness);
+    float G = GeometrySmith(normal, toEye, lightVec, roughness);
+    float3 F = SchlickFresnel(mat.F0, max(dot(H, toEye), 0.0));
+    
+    float3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(normal, toEye), 0.0) * max(dot(normal, lightVec), 0.0) + 0.0001; // + 0.0001 to prevent divide by zero
+    float3 specular = numerator / denominator;
 
-    // The distance from surface to light.
-    float d = length(lightVec);
-
-    // Range test.
-    if (d > L.FalloffEnd)
-        return 0.0f;
-
-    // Normalize the light vector.
-    lightVec /= d;
-
+    float3 kS = F;
+    float3 kD = 1.0 - kS;
+    
+    kD *= 1.0 - mat.Metallic;
+    
     // Scale light down by Lambert's cosine law.
     float ndotl = max(dot(lightVec, normal), 0.0f);
     float3 lightStrength = L.Strength * ndotl;
-
-    // Attenuate light by distance.
-    float att = CalcAttenuation(d, L.FalloffStart, L.FalloffEnd);
-    lightStrength *= att;
-
-    return BlinnPhong(lightStrength, lightVec, normal, toEye, mat);
-}
-
-//---------------------------------------------------------------------------------------
-// Evaluates the lighting equation for spot lights.
-//---------------------------------------------------------------------------------------
-float3 ComputeSpotLight(Light L, Material mat, float3 pos, float3 normal, float3 toEye)
-{
-    // The vector from the surface to the light.
-    float3 lightVec = L.Position - pos;
-
-    // The distance from surface to light.
-    float d = length(lightVec);
-
-    // Range test.
-    if (d > L.FalloffEnd)
-        return 0.0f;
-
-    // Normalize the light vector.
-    lightVec /= d;
-
-    // Scale light down by Lambert's cosine law.
-    float ndotl = max(dot(lightVec, normal), 0.0f);
-    float3 lightStrength = L.Strength * ndotl;
-
-    // Attenuate light by distance.
-    float att = CalcAttenuation(d, L.FalloffStart, L.FalloffEnd);
-    lightStrength *= att;
-
-    // Scale by spotlight
-    float spotFactor = pow(max(dot(-lightVec, L.Direction), 0.0f), L.SpotPower);
-    lightStrength *= spotFactor;
-
-    return BlinnPhong(lightStrength, lightVec, normal, toEye, mat);
+    
+    return (kD * mat.gDiffuseAlbedo.rgb / PI1 + specular) * lightStrength;
 }
 
 float4 ComputeLighting(Light gLights[MaxLights], Material mat,
-                       float3 pos, float3 normal, float3 toEye,
-                       float3 shadowFactor)
+                       float3 pos, float3 normal, float3 toEye)
 {
     float3 result = 0.0f;
 
@@ -145,24 +129,17 @@ float4 ComputeLighting(Light gLights[MaxLights], Material mat,
 #if (NUM_DIR_LIGHTS > 0)
     for (i = 0; i < NUM_DIR_LIGHTS; ++i)
     {
-        result += shadowFactor[i] * ComputeDirectionalLight(gLights[i], mat, normal, toEye);
+        result +=  ComputeDirectionalLight(gLights[i], mat, normal, toEye);
     }
 #endif
 
 #if (NUM_POINT_LIGHTS > 0)
-    for(i = NUM_DIR_LIGHTS; i < NUM_DIR_LIGHTS+NUM_POINT_LIGHTS; ++i)
+    for (i = 0; i < NUM_POINT_LIGHTS; ++i)
     {
-        result += ComputePointLight(gLights[i], mat, pos, normal, toEye);
+        result += ComputePointLight(gLights[i], mat, normal, toEye, pos);
     }
 #endif
-
-#if (NUM_SPOT_LIGHTS > 0)
-    for(i = NUM_DIR_LIGHTS + NUM_POINT_LIGHTS; i < NUM_DIR_LIGHTS + NUM_POINT_LIGHTS + NUM_SPOT_LIGHTS; ++i)
-    {
-        result += ComputeSpotLight(gLights[i], mat, pos, normal, toEye);
-    }
-#endif 
-
+    
     return float4(result, 0.0f);
 }
 

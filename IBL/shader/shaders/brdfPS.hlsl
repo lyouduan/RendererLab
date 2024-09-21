@@ -1,8 +1,5 @@
 #include "common.hlsli"
 
-Texture2D gCubeMap : register(t0);
-Texture2D gDiffuseMap[8] : register(t1);
-
 const float PI = 3.14159265359;
 
 float DistributionGGX(float3 N, float3 H, float roughness)
@@ -96,7 +93,7 @@ float2 IntegrateBRDF(float NdotV, float roughness)
 
     float3 N = float3(0.0, 0.0, 1.0);
     
-    const uint SAMPLE_COUNT = 128;
+    const uint SAMPLE_COUNT = 64;
     for (uint i = 0u; i < SAMPLE_COUNT; ++i)
     {
         // generates a sample vector that's biased towards the

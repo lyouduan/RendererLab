@@ -98,13 +98,13 @@ void GameApp::RenderScene(void)
 		DrawSceneToCubeMap(gfxContext);
 
 		// irradiance cube map
-		//ConvoluteCubeMap(gfxContext);
+		ConvoluteCubeMap(gfxContext);
 
 		// prefilter cube map
 		PrefilterCubeMap(gfxContext);
 
 		// brdf LUT
-		//Brdf2DLUT(gfxContext);
+		Brdf2DLUT(gfxContext);
 	}
 	// 
 	// scene pass
@@ -135,26 +135,22 @@ void GameApp::RenderScene(void)
 	gfxContext.SetBufferSRV(2, matBuffer);
 
 	// srv tables
-	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
+	gfxContext.SetDynamicDescriptors(5, 0, m_srvs.size(), &m_srvs[0]);
 
 	// draw call
 	//if (!m_bRenderShapes)
 	{
 		gfxContext.SetDynamicDescriptor(3, 0, g_IrradianceMapBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(4, 0, g_PrefilterBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(5, 0, g_Brdf2DLutBuffer.GetSRV());
 		gfxContext.SetPipelineState(m_PSOs["opaque"]);
 		DrawRenderItems(gfxContext, m_ShapeRenders[(int)RenderLayer::Opaque]);
 	}
 	
 	// draw sky box at last
 	gfxContext.SetPipelineState(m_PSOs["sky"]);
-	if(!m_bRenderShapes)
 	{
-		gfxContext.SetDynamicDescriptor(3, 0, g_PrefilterBuffer.GetSRV());
-		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
-	}
-	else
-	{
-		gfxContext.SetDynamicDescriptor(3, 0, g_PrefilterBuffer.GetSRV());
+		gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
 		DrawRenderItems(gfxContext, m_SkyboxRenders[(int)RenderLayer::Skybox]);
 	}
 
@@ -168,12 +164,13 @@ void GameApp::RenderScene(void)
 void GameApp::SetPsoAndRootSig()
 {
 	// initialize root signature
-	m_RootSignature.Reset(5, 1);
+	m_RootSignature.Reset(6, 1);
 	m_RootSignature[0].InitAsConstantBuffer(0, D3D12_SHADER_VISIBILITY_ALL);
 	m_RootSignature[1].InitAsConstantBuffer(1, D3D12_SHADER_VISIBILITY_ALL);
 	m_RootSignature[2].InitAsBufferSRV(0, D3D12_SHADER_VISIBILITY_ALL, 1);
 	m_RootSignature[3].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 0, 1);
-	m_RootSignature[4].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 8);
+	m_RootSignature[4].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 1, 1);
+	m_RootSignature[5].InitAsDescriptorRange(D3D12_DESCRIPTOR_RANGE_TYPE_SRV, 2, 8);
 	// sampler
 	m_RootSignature.InitStaticSampler(0, Graphics::SamplerLinearWrapDesc, D3D12_SHADER_VISIBILITY_PIXEL);
 
@@ -344,7 +341,7 @@ void GameApp::DrawSceneToCubeMap(GraphicsContext& gfxContext)
 
 	// srv tables
 	gfxContext.SetDynamicDescriptor(3, 0, m_cubeMap[0].GetSRV());
-	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
+	gfxContext.SetDynamicDescriptors(5, 0, m_srvs.size(), &m_srvs[0]);
 
 	for (int i = 0; i < 6; ++i)
 	{
@@ -357,9 +354,6 @@ void GameApp::DrawSceneToCubeMap(GraphicsContext& gfxContext)
 		XMStoreFloat4x4(&passConstant.ViewProj, XMMatrixTranspose(cubeCamera[i].GetViewProjMatrix()));
 		XMStoreFloat3(&passConstant.eyePosW, cubeCamera[i].GetPosition());
 		gfxContext.SetDynamicConstantBufferView(1, sizeof(passConstant), &passConstant);
-
-		//gfxContext.SetPipelineState(m_PSOs["opaque"]);
-		//DrawRenderItems(gfxContext, m_ShapeRenders[(int)RenderLayer::Opaque]);
 
 		// draw call
 		gfxContext.SetPipelineState(m_PSOs["cubemap"]);
@@ -391,7 +385,7 @@ void GameApp::ConvoluteCubeMap(GraphicsContext& gfxContext)
 
 	// srv tables
 	gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
-	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
+	gfxContext.SetDynamicDescriptors(5, 0, m_srvs.size(), &m_srvs[0]);
 
 	for (int i = 0; i < 6; ++i)
 	{
@@ -433,17 +427,21 @@ void GameApp::PrefilterCubeMap(GraphicsContext& gfxContext)
 
 	// srv tables
 	gfxContext.SetDynamicDescriptor(3, 0, g_SceneCubeMapBuffer.GetSRV());
-	gfxContext.SetDynamicDescriptors(4, 0, m_srvs.size(), &m_srvs[0]);
+	gfxContext.SetDynamicDescriptors(5, 0, m_srvs.size(), &m_srvs[0]);
 
-	passConstant.pad1 = 0.1f;
+	passConstant.roughness = 0.1f;
 	auto mips = g_PrefilterBuffer.GetResource()->GetDesc().MipLevels;
 	for (int mip = 0; mip < mips; ++mip)
 	{
-		D3D12_VIEWPORT mViewport = { 0.0f, 0.0f, (float)(width / pow(2, mip)), (float)(height / pow(2, mip)), 0.0f, 1.0f};
-		D3D12_RECT mScissorRect = { 0, 0, (LONG)(width / pow(2, mip)), (LONG)(height / pow(2, mip)) };
+		auto mipwidth = (float)(width / pow(2, mip));
+		auto mipheight = (float)(height / pow(2, mip));
+		D3D12_VIEWPORT mViewport = { 0.0f, 0.0f, (float)mipwidth, (float)mipheight, 0.0f, 1.0f};
+		D3D12_RECT mScissorRect = { 0, 0, (LONG)mipwidth, (LONG)mipheight };
+
 		gfxContext.SetViewportAndScissor(mViewport, mScissorRect);
 
-		passConstant.pad1 = 0.1 + 0.2 * mip;
+		passConstant.resulotion = mipwidth;
+		passConstant.roughness = 0.1 + 0.2 * mip;
 		for (int i = 0; i < 6; ++i)
 		{
 			// clear dsv
@@ -772,12 +770,12 @@ void GameApp::BuildMaterials()
 		for (int col = 0; col < 7; ++col)
 		{
 			auto red = std::make_unique<Material>();
-			red->Name = row * 7 + col;
+			red->Name = m_Materials.size();
 			red->DiffuseMapIndex = 0;
 			red->DiffuseAlbedo = XMFLOAT4(0.8f, 0.0f, 0.0f, 1.0f);
-			auto f0 = std::clamp((float)col / 7.0f, 0.00f, 1.0f);
-			red->FresnelR0 = XMFLOAT3(f0, f0, f0);
-			red->Roughness = std::clamp((float)row / 7.0f, 0.05f, 1.0f);
+			red->metallic = std::clamp((float)col / 7.0f, 0.00f, 1.0f);
+			red->FresnelR0 = XMFLOAT3(0.1, 0.1, 0.1);
+			red->Roughness = std::clamp((float)(row) / 7.0f, 0.05f, 1.0f);
 
 			m_Materials[red->Name] = std::move(red);
 		}
@@ -785,7 +783,7 @@ void GameApp::BuildMaterials()
 
 	auto sky = std::make_unique<Material>();
 	sky->Name = "sky";
-	sky->DiffuseMapIndex = 1;
+	sky->DiffuseMapIndex = m_Materials.size();
 	sky->DiffuseAlbedo = XMFLOAT4(1.0f, 1.0f, 1.0f, 1.0f);
 	sky->FresnelR0 = XMFLOAT3(0.1f, 0.1f, 0.1f);
 	sky->Roughness = 0.5f;
@@ -796,7 +794,7 @@ void GameApp::BuildMaterials()
 	for (auto& m : m_Materials)
 	{
 		temp.DiffuseAlbedo = m.second->DiffuseAlbedo;
-		temp.FresnelR0 = m.second->FresnelR0;
+		temp.metallic = m.second->metallic;
 		temp.DiffuseMapIndex = m.second->DiffuseMapIndex;
 		XMStoreFloat4x4(&temp.MatTransform, XMMatrixTranspose(m.second->MatTransform));
 		temp.Roughness = m.second->Roughness;
@@ -834,26 +832,24 @@ void GameApp::UpdatePassCB(float deltaT)
 {
 	// up
 	XMStoreFloat4x4(&passConstant.ViewProj, XMMatrixTranspose(camera.GetViewProjMatrix())); // hlsl 列主序矩阵
-
-	// light
-	XMVECTOR lightDir = -DirectX::XMVectorSet(
-		1.0f * sinf(mSunTheta) * cosf(mSunTheta),
-		1.0f * cosf(mSunTheta),
-		1.0f * sinf(mSunTheta) * sinf(mSunTheta),
-		1.0f);
-	XMStoreFloat3(&passConstant.Lights[0].Direction, lightDir);
-	passConstant.Lights[0].Strength = { 0.9f, 0.9f, 0.9f };
-	passConstant.Lights[0].FalloffEnd = 100.0;
-	passConstant.Lights[0].Position = { 0.0f, 10.0f, -10.0f };
-	passConstant.ambientLight = { 0.25f, 0.25f, 0.35f, 1.0f };
-
 	XMStoreFloat3(&passConstant.eyePosW, camera.GetPosition());
+	passConstant.ambientLight = { 0.2f, 0.2f, 0.2f, 1.0f };
 
-	passConstant.Lights[1].Direction = { -0.57735f, -0.57735f, 0.57735f };
-	passConstant.Lights[1].Strength = { 0.3f, 0.3f, 0.3f };
+	passConstant.Lights[0].Direction = { 0.57735f, 0.57735f, 0.57735f };
+	passConstant.Lights[0].Strength = { 10.9f, 10.9f, 10.9f };
+	passConstant.Lights[0].Position = { -10.0f, 10.0f, 10.0f };
 
-	passConstant.Lights[2].Direction = { 0.0f, -0.707f, -0.707f };
-	passConstant.Lights[2].Strength = { 0.15f, 0.15f, 0.15f };
+	passConstant.Lights[1].Direction = { 0.57735f, -0.57735f, 0.57735f };
+	passConstant.Lights[1].Strength = { 10.9f, 10.9f, 10.9f };
+	passConstant.Lights[1].Position = { 10.0f, 10.0f, 10.0f };
+
+	passConstant.Lights[2].Direction = { -0.57735f, -0.57735f, 0.57735f };
+	passConstant.Lights[2].Strength = { 10.9f, 10.9f, 10.9f };
+	passConstant.Lights[2].Position = { -10.0f, -10.0f, -10.0f };
+
+	passConstant.Lights[3].Direction = { -0.57735f, 0.57735f, 0.57735f };
+	passConstant.Lights[3].Strength = { 10.9f, 10.9f, 10.9f };
+	passConstant.Lights[3].Position = { 10.0f, -10.0f, -10.0f };
 }
 
 void GameApp::UpdateCamera(float deltaT)

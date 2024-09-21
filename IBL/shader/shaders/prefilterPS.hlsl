@@ -1,7 +1,8 @@
 #include "common.hlsli"
 
 TextureCube environmentMap : register(t0);
-Texture2D gDiffuseMap[8] : register(t1);
+TextureCube prefilterMap : register(t1);
+Texture2D gDiffuseMap[8] : register(t2);
 
 const float PI = 3.14159265359;
 
@@ -69,11 +70,13 @@ float4 main(VertexOut pin) : SV_TARGET
     MaterialData matData = gMaterialData[objConstants.gMaterialIndex];
     float roughness = passConstants.passRoughness;
     
+    //float saTexel = 4.0 * PI / (6.0 * passConstants.resulotion * passConstants.resulotion);
+    
     // make the simplifying assumption that V equals R equals the normal
     float3 R = N;
     float3 V = R;
     
-    const uint SAMPLE_COUNT = 128;
+    const uint SAMPLE_COUNT = 64;
     float3 prefilteredColor = float3(0.0, 0.0, 0.0);
     float totalWeight = 0.0;
     
@@ -86,14 +89,24 @@ float4 main(VertexOut pin) : SV_TARGET
         float NdotL = max(dot(N, L), 0.0);
         if(NdotL > 0.0)
         {
+            // sample from the environment's mip level based on roughness/pdf
+            //float D = DistributionGGX(N, H, roughness);
+            //float NdotH = saturate(dot(N, H));
+            //float HdotV = saturate(dot(H, V));
+            //float pdf = D * NdotH / (4.0 * HdotV) + 0.0001;
+            //
+            //// solid angle associated to a sample
+            //float saSample = 1.0 / ((float)SAMPLE_COUNT * pdf + 0.0001);
+            //
+            //float mipLevel = roughness == 0.0 ? 0.0 : 0.5 * log2(saSample / saTexel);
+            
             prefilteredColor += environmentMap.Sample(gsamLinearClamp, L).rgb * NdotL;
             totalWeight += NdotL;
         }
         
-        prefilteredColor /= totalWeight;
     }
     
-    prefilteredColor = pow(prefilteredColor, 1 / 2.2);
+    prefilteredColor /= totalWeight;
     
     return float4(prefilteredColor, 1.0);
 }

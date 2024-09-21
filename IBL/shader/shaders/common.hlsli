@@ -36,15 +36,17 @@ struct PassConstants
     float gFogStart;
     float gFogRange;
     float passRoughness;
-    float pad2;
+    float resulotion;
 };
 
 struct MaterialData
 {
     float4x4 gMatTransform;
     float4   gDiffuseAlbedo;
-    float3   gFresnelR0;
+    float    gMetallic;
     float    gRoughness;
+    float    pad1;
+    float    pad2;
     uint gDiffuseMapIndex;
     uint MatPad1;
     uint MatPad2;
