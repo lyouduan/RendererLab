@@ -12,13 +12,13 @@ struct Material
 	DirectX::XMFLOAT4 DiffuseAlbedo = { 1.0f, 1.0f, 1.0f, 1.0f };
 	DirectX::XMFLOAT3 FresnelR0 = { 1.0f, 1.0f, 1.0f };
 	float Roughness = 0.25f; // align with float3
+	float metallic = 0.0;
+
 
 	DirectX::XMMATRIX MatTransform = DirectX::XMMatrixIdentity();
 
 	UINT DiffuseMapIndex = 0;
-	UINT metallic  = 0.0;
-	UINT MaterialPad[2];
-
+	UINT MaterialPad[3];
 };
 
 struct Vertex {

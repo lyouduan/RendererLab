@@ -771,11 +771,11 @@ void GameApp::BuildMaterials()
 		{
 			auto red = std::make_unique<Material>();
 			red->Name = m_Materials.size();
-			red->DiffuseMapIndex = 0;
+			red->DiffuseMapIndex = m_Materials.size();
 			red->DiffuseAlbedo = XMFLOAT4(0.8f, 0.0f, 0.0f, 1.0f);
-			red->metallic = std::clamp((float)col / 7.0f, 0.00f, 1.0f);
+			red->metallic = std::clamp((float)(col / 7.0f), 0.05f, 1.0f);
 			red->FresnelR0 = XMFLOAT3(0.1, 0.1, 0.1);
-			red->Roughness = std::clamp((float)(row) / 7.0f, 0.05f, 1.0f);
+			red->Roughness = std::clamp((float)(row / 7.0f), 0.05f, 1.0f);
 
 			m_Materials[red->Name] = std::move(red);
 		}
@@ -794,12 +794,14 @@ void GameApp::BuildMaterials()
 	for (auto& m : m_Materials)
 	{
 		temp.DiffuseAlbedo = m.second->DiffuseAlbedo;
-		temp.metallic = m.second->metallic;
 		temp.DiffuseMapIndex = m.second->DiffuseMapIndex;
 		XMStoreFloat4x4(&temp.MatTransform, XMMatrixTranspose(m.second->MatTransform));
+
+		temp.metallic = m.second->metallic;
 		temp.Roughness = m.second->Roughness;
 		mat.push_back(temp);
 	}
+
 	std::sort(mat.begin(), mat.end(), 
 		[](const MaterialConstants& a, const MaterialConstants& b) 
 		{return a.DiffuseMapIndex < b.DiffuseMapIndex; }
@@ -836,20 +838,20 @@ void GameApp::UpdatePassCB(float deltaT)
 	passConstant.ambientLight = { 0.2f, 0.2f, 0.2f, 1.0f };
 
 	passConstant.Lights[0].Direction = { 0.57735f, 0.57735f, 0.57735f };
-	passConstant.Lights[0].Strength = { 10.9f, 10.9f, 10.9f };
+	passConstant.Lights[0].Strength = { 1.0f, 1.0f, 1.0f };
 	passConstant.Lights[0].Position = { -10.0f, 10.0f, 10.0f };
 
 	passConstant.Lights[1].Direction = { 0.57735f, -0.57735f, 0.57735f };
-	passConstant.Lights[1].Strength = { 10.9f, 10.9f, 10.9f };
+	passConstant.Lights[1].Strength = { 1.0f, 1.0f, 1.0f };
 	passConstant.Lights[1].Position = { 10.0f, 10.0f, 10.0f };
 
 	passConstant.Lights[2].Direction = { -0.57735f, -0.57735f, 0.57735f };
-	passConstant.Lights[2].Strength = { 10.9f, 10.9f, 10.9f };
-	passConstant.Lights[2].Position = { -10.0f, -10.0f, -10.0f };
+	passConstant.Lights[2].Strength = { 1.0f, 1.0f, 1.0f };
+	passConstant.Lights[2].Position = { -10.0f, -10.0f, 10.0f };
 
 	passConstant.Lights[3].Direction = { -0.57735f, 0.57735f, 0.57735f };
-	passConstant.Lights[3].Strength = { 10.9f, 10.9f, 10.9f };
-	passConstant.Lights[3].Position = { 10.0f, -10.0f, -10.0f };
+	passConstant.Lights[3].Strength = { 1.0f, 1.0f, 1.0f };
+	passConstant.Lights[3].Position = { 10.0f, -10.0f, 10.0f };
 }
 
 void GameApp::UpdateCamera(float deltaT)

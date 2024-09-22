@@ -8,7 +8,7 @@
 #endif
 
 #ifndef NUM_POINT_LIGHTS
-#define NUM_POINT_LIGHTS 2
+#define NUM_POINT_LIGHTS 1
 #endif
 
 #ifndef NUM_SPOT_LIGHTS
@@ -23,20 +23,20 @@ struct Material
     float Metallic;
 };
 
-static const float PI1 = 3.14159265359;
+static const float PI = 3.14159265359;
 
 float DistributionGGX(float3 N, float3 H, float roughness)
 {
     float a = roughness * roughness;
     float a2 = a * a;
-    float NdotH = saturate(dot(N, H));
+    float NdotH = max(dot(N, H), 0.0);
     float NdotH2 = NdotH * NdotH;
     
     float nom = a2;
     float denom = (NdotH2 * (a2 - 1.0) + 1.0);
-    denom = PI1 * denom * denom;
+    denom = PI * denom * denom;
     
-    return 1.0;
+    return nom / denom;
 }
 
 float GeometrySchlickGGX(float NdotV, float roughness)
@@ -52,8 +52,8 @@ float GeometrySchlickGGX(float NdotV, float roughness)
 
 float GeometrySmith(float3 N, float3 V, float3 L, float roughness)
 {
-    float NdotV = saturate(dot(N, V));
-    float NdotL = saturate(dot(N, L));
+    float NdotV = max(dot(N, V), 0.0);
+    float NdotL = max(dot(N, L), 0.0);
     float ggx2 = GeometrySchlickGGX(NdotV, roughness);
     float ggx1 = GeometrySchlickGGX(NdotL, roughness);
 
@@ -67,44 +67,24 @@ float3 SchlickFresnel(float3 R0, float cosTheta)
     return R0 + (1.0f - R0) * (f0 * f0 * f0 * f0 * f0);
 }
 
-float3 CT(float3 lightStrength, float3 lightVec, float3 normal, float3 toEye, Material mat)
-{
-    
-}
-
 //---------------------------------------------------------------------------------------
 // Evaluates the lighting equation for directional lights.
 //---------------------------------------------------------------------------------------
-float3 ComputeDirectionalLight(Light L, Material mat, float3 normal, float3 toEye)
+float3 ComputePointLight(Light light, Material mat, float3 normal, float3 V, float3 pos)
 {
     // The light vector aims opposite the direction the light rays travel.
-    float3 lightVec = -L.Direction;
-
-    // Scale light down by Lambert's cosine law.
-    float ndotl = max(dot(lightVec, normal), 0.0f);
-    float3 lightStrength = L.Strength * ndotl;
+    float3 L = normalize(light.Position - pos);
+    float3 H = normalize(V + L);
     
-    return CT(lightStrength, lightVec, normal, toEye, mat);
-}
-
-//---------------------------------------------------------------------------------------
-// Evaluates the lighting equation for directional lights.
-//---------------------------------------------------------------------------------------
-float3 ComputePointLight(Light L, Material mat, float3 normal, float3 toEye, float3 pos)
-{
-    // The light vector aims opposite the direction the light rays travel.
-    float3 lightVec = L.Position - pos;
-    float3 H = normalize(toEye + lightVec);
-    
-    float roughness = mat.gRoughness;
+    float roughness = 0.8;
     
     // cook-torrance brdf
     float NDF = DistributionGGX(normal, H, roughness);
-    float G = GeometrySmith(normal, toEye, lightVec, roughness);
-    float3 F = SchlickFresnel(mat.F0, max(dot(H, toEye), 0.0));
+    float G = GeometrySmith(normal, V, L, roughness);
+    float3 F = SchlickFresnel(mat.F0, max(dot(H, V), 0.0));
     
     float3 numerator = NDF * G * F;
-    float denominator = 4.0 * max(dot(normal, toEye), 0.0) * max(dot(normal, lightVec), 0.0) + 0.0001; // + 0.0001 to prevent divide by zero
+    float denominator = 4.0 * max(dot(normal, V), 0.0) * max(dot(normal, L), 0.0) + 0.0001; // + 0.0001 to prevent divide by zero
     float3 specular = numerator / denominator;
 
     float3 kS = F;
@@ -113,10 +93,10 @@ float3 ComputePointLight(Light L, Material mat, float3 normal, float3 toEye, flo
     kD *= 1.0 - mat.Metallic;
     
     // Scale light down by Lambert's cosine law.
-    float ndotl = max(dot(lightVec, normal), 0.0f);
-    float3 lightStrength = L.Strength * ndotl;
+    float ndotl = max(dot(L, normal), 0.0f);
+    float3 lightStrength = light.Strength * ndotl;
     
-    return (kD * mat.gDiffuseAlbedo.rgb / PI1 + specular) * lightStrength;
+    return (kD * mat.gDiffuseAlbedo.rgb / PI + specular) * lightStrength;
 }
 
 float4 ComputeLighting(Light gLights[MaxLights], Material mat,
@@ -125,13 +105,6 @@ float4 ComputeLighting(Light gLights[MaxLights], Material mat,
     float3 result = 0.0f;
 
     int i = 0;
-
-#if (NUM_DIR_LIGHTS > 0)
-    for (i = 0; i < NUM_DIR_LIGHTS; ++i)
-    {
-        result +=  ComputeDirectionalLight(gLights[i], mat, normal, toEye);
-    }
-#endif
 
 #if (NUM_POINT_LIGHTS > 0)
     for (i = 0; i < NUM_POINT_LIGHTS; ++i)
