@@ -508,12 +508,12 @@ void GameApp::BuildCubeFaceCamera(float x, float y, float z)
 	// look along each coordinate axis;
 	Math::Vector3 targets[6] =
 	{
-		{ + 1.0f,  + 0.0f,  + 0.0f}, // +X
-		{ - 1.0f,  + 0.0f,  + 0.0f}, // -X
-		{ + 0.0f,  + 1.0f,  + 0.0f}, // +Y
-		{ + 0.0f,  - 1.0f,  + 0.0f}, // -Y
-		{ +0.0f,   +0.0f,    -1.0f}, // -Z
-		{ +0.0f,   + 0.0f,  + 1.0f}, // +Z
+		{ +1.0f,  +0.0f,  +0.0f}, // +X
+		{ -1.0f,  +0.0f,  +0.0f}, // -X
+		{ +0.0f,  +1.0f,  +0.0f}, // +Y
+		{ +0.0f,  -1.0f,  +0.0f}, // -Y
+		{ +0.0f,  +0.0f,  -1.0f}, // -Z
+		{ +0.0f,  +0.0f,  +1.0f}, // +Z
 
 	};
 

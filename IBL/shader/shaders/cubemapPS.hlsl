@@ -16,6 +16,7 @@ float2 SphereToEquirectangular(float3 dir)
     return float2(u, v);
 }
 
+
 float4 main(VertexOut pin) : SV_TARGET
 {
     float2 uv = SphereToEquirectangular(normalize(pin.positionW));

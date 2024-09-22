@@ -105,7 +105,7 @@ float4 main(VertexOut pin) : SV_TARGET
     //
     //irradiance = PI * irradiance * (1.0 / float(nrSamples));
     
-    const int SAMPLE_NUM = 64;
+    const int SAMPLE_NUM = 1;
     
     for (int i = 0; i < SAMPLE_NUM; ++i)
     {

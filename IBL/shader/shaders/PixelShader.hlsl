@@ -61,6 +61,6 @@ float4 main(VertexOut input) : SV_TARGET
     litColor = litColor / (litColor + float3(1.0, 1.0, 1.0));
     litColor = pow(litColor, 1.0 / 2.2);
     
-    
+
     return float4(litColor, 1.0);
 }
