@@ -38,7 +38,8 @@ float4 main(VertexOut input) : SV_TARGET
     
     float3 Ks = F;
     float3 Kd = 1.0 - Ks;
-
+    Kd *= 1 - metallic;
+    
     float3 irradiance = gIrradianceCubeMap.Sample(gsamLinearClamp, normal).rgb;
     float3 diffuse = irradiance * diffuseAlbedo.rgb;
     
@@ -52,7 +53,7 @@ float4 main(VertexOut input) : SV_TARGET
     
     float3 specular = prefilteredColor * (F * EnvBRDF.x + EnvBRDF.y);
     
-    float3 ambient = (Kd * diffuse + specular) * passConstants.gAmbientLight.rgb;
+    float3 ambient = (diffuse + specular) * passConstants.gAmbientLight.rgb;
     
     // total Lo
     float3 litColor = Lo + ambient;

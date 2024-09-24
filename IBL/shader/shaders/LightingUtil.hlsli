@@ -96,7 +96,7 @@ float3 ComputePointLight(Light light, Material mat, float3 normal, float3 V, flo
     float ndotl = max(dot(L, normal), 0.0f);
     float3 lightStrength = light.Strength * ndotl;
     
-    return (kD * mat.gDiffuseAlbedo.rgb / PI + specular) * lightStrength;
+    return (mat.gDiffuseAlbedo.rgb / PI + specular) * lightStrength;
 }
 
 float4 ComputeLighting(Light gLights[MaxLights], Material mat,

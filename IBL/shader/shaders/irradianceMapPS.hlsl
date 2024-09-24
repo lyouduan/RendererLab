@@ -79,7 +79,7 @@ float3 CosOnHalfSphere(float2 Xi, float3 N)
 
 float4 main(VertexOut pin) : SV_TARGET
 {
-    float3 N = normalize(pin.positionW);
+    float3 N = normalize(-pin.positionW);
     float3 irradiance = float3(0.0, 0.0, 0.0);
     
     // tangent space calculation from origin point
@@ -105,8 +105,7 @@ float4 main(VertexOut pin) : SV_TARGET
     //
     //irradiance = PI * irradiance * (1.0 / float(nrSamples));
     
-    const int SAMPLE_NUM = 1;
-    
+    const int SAMPLE_NUM = 64;
     for (int i = 0; i < SAMPLE_NUM; ++i)
     {
         float2 Xi = Hammersley(i, SAMPLE_NUM);

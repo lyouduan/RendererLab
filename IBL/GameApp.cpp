@@ -508,10 +508,10 @@ void GameApp::BuildCubeFaceCamera(float x, float y, float z)
 	// look along each coordinate axis;
 	Math::Vector3 targets[6] =
 	{
-		{ +1.0f,  +0.0f,  +0.0f}, // +X
-		{ -1.0f,  +0.0f,  +0.0f}, // -X
-		{ +0.0f,  +1.0f,  +0.0f}, // +Y
-		{ +0.0f,  -1.0f,  +0.0f}, // -Y
+		{ -1.0f,  +0.0f,  +0.0f}, // +X
+		{ +1.0f,  +0.0f,  +0.0f}, // -X
+		{ +0.0f,  -1.0f,  +0.0f}, // +Y
+		{ +0.0f,  +1.0f,  +0.0f}, // -Y
 		{ +0.0f,  +0.0f,  -1.0f}, // -Z
 		{ +0.0f,  +0.0f,  +1.0f}, // +Z
 
@@ -521,12 +521,12 @@ void GameApp::BuildCubeFaceCamera(float x, float y, float z)
 	// are looking down +Y or -Y, so we need a different "up" vector.
 	Math::Vector3 ups[6] =
 	{
-		{ +0.0f, +1.0f, +0.0f },    // +X
-		{ +0.0f, +1.0f, +0.0f },    // -X
-		{ +0.0f, +0.0f, +1.0f },    // -Y
-		{ +0.0f, +0.0f, -1.0f },    // +Y
-		{ +0.0f, +1.0f, +0.0f },    // -Z
-		{ +0.0f, +1.0f, +0.0f },    // +Z
+		{ 0.0f, -1.0f,  0.0f },    // +X
+		{ 0.0f, -1.0f,  0.0f },    // -X
+		{ 0.0f,  0.0f,  1.0f },    // -Y
+		{ 0.0f,  0.0f, -1.0f },    // +Y
+		{ 0.0f, -1.0f,  0.0f },    // -Z
+		{ 0.0f, -1.0f,  0.0f },    // +Z
 	};
 
 	for (int i = 0; i < 6; ++i)

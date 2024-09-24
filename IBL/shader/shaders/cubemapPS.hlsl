@@ -20,6 +20,8 @@ float2 SphereToEquirectangular(float3 dir)
 float4 main(VertexOut pin) : SV_TARGET
 {
     float2 uv = SphereToEquirectangular(normalize(pin.positionW));
+    // dx坐标系在左上角， openGL在左下角
+    uv.y = 1 - uv.y;
     float3 color = gCubeMap.Sample(gsamLinearClamp, uv).rgb;
     return float4(color, 1.0f);
 }
